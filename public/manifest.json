@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "PR Rebase",
+  "version": "1.0",
+  "description": "A Chrome extension to rebase pull requests on GitHub.",
+  "action": {
+    "default_popup": "index.html"
+  },
+  "permissions": ["scripting", "activeTab", "storage"],
+  "host_permissions": ["https://github.com/*/*/pull/*"]
+}
