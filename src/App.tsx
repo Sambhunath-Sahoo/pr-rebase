@@ -12,6 +12,8 @@ function App() {
     owner: "",
     repo: "",
     prNumber: "",
+    behindBy: 0,
+    hasConflictsOnRebase: false,
   });
 
   const handleSubmit = () => {
@@ -60,17 +62,13 @@ function App() {
   };
 
   const getBranches = async () => {
-    console.log("Fetching PR details with:", prInfo); // Log prInfo to check values
-    if (!token || !prInfo.repo) {
-      console.error("Missing PR information");
-      return;
-    }
+    if (!token || !prInfo.repo) return;
 
     const { owner, repo, prNumber } = prInfo;
-    const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}`;
+    const prUrl = `https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}`;
 
     try {
-      const response = await fetch(url, {
+      const prResponse = await fetch(prUrl, {
         headers: {
           Accept: "application/vnd.github+json",
           Authorization: `Bearer ${token}`,
@@ -78,16 +76,80 @@ function App() {
         },
       });
 
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!prResponse.ok) throw new Error(`HTTP ${prResponse.status}`);
 
-      const prData = await response.json();
+      const prData = await prResponse.json();
+
+      const base = prData.base?.ref || "";
+      const head = prData.head?.ref || "";
+
       setPrInfo((prev) => ({
         ...prev,
-        base: prData.base?.ref || "",
-        head: prData.head?.ref || "",
+        base,
+        head,
       }));
+
+      if (base && head) {
+        const compareUrl = `https://api.github.com/repos/${owner}/${repo}/compare/${base}...${head}`;
+        const compareRes = await fetch(compareUrl, {
+          headers: {
+            Accept: "application/vnd.github+json",
+            Authorization: `Bearer ${token}`,
+            "X-GitHub-Api-Version": "2022-11-28",
+          },
+        });
+
+        const compareData = await compareRes.json();
+        console.log("TCL: getBranches -> compareData", compareData);
+
+        setPrInfo((prev) => ({
+          ...prev,
+          behindBy: compareData.behind_by || 0,
+        }));
+      }
     } catch (error) {
       console.error("Error fetching PR details:", error);
+    }
+  };
+
+  const handleRebase = async () => {
+    const { owner, repo, base, head } = prInfo;
+
+    const mergeUrl = `https://api.github.com/repos/${owner}/${repo}/merges`;
+    try {
+      const response = await fetch(mergeUrl, {
+        method: "POST",
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${token}`,
+          "X-GitHub-Api-Version": "2022-11-28",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          base: head,
+          head: base,
+          commit_message: `Rebase ${head} with ${base}`,
+        }),
+      });
+
+      if (response.status === 409) {
+        setPrInfo((prev) => ({
+          ...prev,
+          hasConflictsOnRebase: true,
+        }));
+        return;
+      }
+
+      const data = await response.json();
+      if (data.sha) {
+        setPrInfo((prev) => ({
+          ...prev,
+          behindBy: 0,
+          hasConflictsOnRebase: false,
+        }));
+      }
+    } catch (err) {
+      console.error("Merge failed:", err);
     }
   };
 
@@ -116,54 +178,112 @@ function App() {
   }, [token]);
 
   useEffect(() => {
-    if (token && isPRPage) {
-      getBranches();
-    }
+    const initialize = async () => {
+      if (token && isPRPage) {
+        await getBranches();
+      }
+      setIsLoading(false);
+    };
+    initialize();
   }, [token, isPRPage]);
 
-  if (isLoading) {
-    return <div>Loading...</div>;
-  }
-
   return (
-    <div className="container">
-      <p className="header">GitHub Pull Request Integration</p>
-
-      {isPRPage ? (
-        !token ? (
-          <div className="token-input">
-            <input
-              type="password"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              placeholder="Enter GitHub Token"
-              className="input-field"
-            />
-            <button onClick={handleSubmit} className="submit-button">
-              Submit Token
-            </button>
-          </div>
-        ) : (
-          <div className="pr-info">
-            <h4 className="pr-title">
-              PR: {prInfo.repo}#{prInfo.prNumber}
-            </h4>
-            <div className="branch-info">
-              <p>
-                <strong>Base:</strong> {prInfo.base || "Loading..."}
-              </p>
-              <p>
-                <strong>Head:</strong> {prInfo.head || "Loading..."}
-              </p>
-            </div>
-          </div>
-        )
-      ) : (
-        <div className="not-pr-page">
-          <p>This is not a GitHub Pull Request page.</p>
-          <p>Please navigate to a PR page to use this extension.</p>
+    <div
+      id="root"
+      className="min-h-screen min-w-80 bg-[#0d1117] text-white flex items-center justify-center p-4"
+    >
+      <div className="w-full max-w-md bg-[#161b22] rounded-2xl shadow-xl border border-[#30363d] p-6 space-y-6">
+        {/* GitHub Logo */}
+        <div className="flex flex-col items-center space-y-2">
+          <img
+            src="assets/github.png"
+            alt="GitHub"
+            className="w-12 h-12 rounded-full"
+          />
+          <h1 className="text-xl font-semibold text-white">
+            PR Rebase Assistant
+          </h1>
+          <p className="text-sm text-gray-400">
+            Automate rebasing in one click
+          </p>
         </div>
-      )}
+
+        {isLoading ? (
+          <p className="text-gray-400 text-center">⏳ Loading...</p>
+        ) : isPRPage ? (
+          !token ? (
+            <div>
+              <label className="block text-sm mb-1 text-gray-300">
+                Enter GitHub Token
+              </label>
+              <input
+                type="password"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                placeholder="ghp_********************"
+                className="w-full px-4 py-2 bg-[#0d1117] border border-[#30363d] rounded-md focus:outline-none focus:ring focus:ring-blue-600"
+              />
+              <button
+                onClick={handleSubmit}
+                className="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-md transition"
+              >
+                Submit Token
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-gray-400">Repository</p>
+                <h2 className="text-lg font-semibold">
+                  {prInfo.repo}#{prInfo.prNumber}
+                </h2>
+              </div>
+
+              <div className="text-sm space-y-1">
+                <p>
+                  <span className="text-gray-400">Base Branch: </span>
+                  <span className="font-mono">{prInfo.base}</span>
+                </p>
+                <p>
+                  <span className="text-gray-400">Head Branch: </span>
+                  <span className="font-mono">{prInfo.head}</span>
+                </p>
+              </div>
+
+              {prInfo.behindBy !== 0 ? (
+                <div className="space-y-3">
+                  <span className="inline-block bg-yellow-500 text-black px-2 py-1 rounded text-xs">
+                    🔻 Behind by {prInfo.behindBy} commits
+                  </span>
+                  <button
+                    onClick={handleRebase}
+                    disabled={isLoading}
+                    className={`w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 rounded-md ${
+                      isLoading ? "opacity-50 cursor-not-allowed" : ""
+                    }`}
+                  >
+                    {isLoading ? "Rebasing..." : "Rebase PR"}
+                  </button>
+                  {prInfo.hasConflictsOnRebase && (
+                    <p className="text-red-400 text-sm">
+                      ⚠️ Cannot rebase automatically. Please resolve conflicts
+                      manually.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-green-400 text-sm">
+                  ✅ PR is up-to-date with base branch
+                </p>
+              )}
+            </div>
+          )
+        ) : (
+          <p className="text-gray-400 text-sm text-center">
+            🚫 This is not a Pull Request page. Please open a PR.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
