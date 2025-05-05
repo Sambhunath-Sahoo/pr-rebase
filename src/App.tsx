@@ -6,6 +6,9 @@ function App() {
   const [token, setToken] = useState("");
   const [isPRPage, setIsPRPage] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRebasing, setIsRebasing] = useState(false);
+  const [hasFetchedCompareData, setHasFetchedCompareData] = useState(false);
+
   const [prInfo, setPrInfo] = useState({
     base: "",
     head: "",
@@ -14,6 +17,7 @@ function App() {
     prNumber: "",
     behindBy: 0,
     hasConflictsOnRebase: false,
+    rebaseSuccess: false,
   });
 
   const handleSubmit = () => {
@@ -106,16 +110,25 @@ function App() {
           ...prev,
           behindBy: compareData.behind_by || 0,
         }));
+        setHasFetchedCompareData(true);
       }
     } catch (error) {
       console.error("Error fetching PR details:", error);
+      setHasFetchedCompareData(true);
     }
   };
 
   const handleRebase = async () => {
-    const { owner, repo, base, head } = prInfo;
+    setIsRebasing(true);
+    setPrInfo((prev) => ({
+      ...prev,
+      hasConflictsOnRebase: false,
+      rebaseSuccess: false,
+    }));
 
+    const { owner, repo, base, head } = prInfo;
     const mergeUrl = `https://api.github.com/repos/${owner}/${repo}/merges`;
+
     try {
       const response = await fetch(mergeUrl, {
         method: "POST",
@@ -146,10 +159,13 @@ function App() {
           ...prev,
           behindBy: 0,
           hasConflictsOnRebase: false,
+          rebaseSuccess: true,
         }));
       }
     } catch (err) {
       console.error("Merge failed:", err);
+    } finally {
+      setIsRebasing(false);
     }
   };
 
@@ -182,7 +198,6 @@ function App() {
       if (token && isPRPage) {
         await getBranches();
       }
-      setIsLoading(false);
     };
     initialize();
   }, [token, isPRPage]);
@@ -193,7 +208,6 @@ function App() {
       className="min-h-screen min-w-80 bg-[#0d1117] text-white flex items-center justify-center p-4"
     >
       <div className="w-full max-w-md bg-[#161b22] rounded-2xl shadow-xl border border-[#30363d] p-6 space-y-6">
-        {/* GitHub Logo */}
         <div className="flex flex-col items-center space-y-2">
           <img
             src="assets/github.png"
@@ -225,7 +239,7 @@ function App() {
               />
               <button
                 onClick={handleSubmit}
-                className="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-md transition"
+                className="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-md transition cursor-pointer"
               >
                 Submit Token
               </button>
@@ -250,24 +264,38 @@ function App() {
                 </p>
               </div>
 
-              {prInfo.behindBy !== 0 ? (
+              {!hasFetchedCompareData ? (
+                <p className="text-gray-400 text-sm">
+                  🔍 Checking PR status...
+                </p>
+              ) : prInfo.behindBy !== 0 ? (
                 <div className="space-y-3">
                   <span className="inline-block bg-yellow-500 text-black px-2 py-1 rounded text-xs">
                     🔻 Behind by {prInfo.behindBy} commits
                   </span>
                   <button
                     onClick={handleRebase}
-                    disabled={isLoading}
-                    className={`w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 rounded-md ${
-                      isLoading ? "opacity-50 cursor-not-allowed" : ""
+                    disabled={isRebasing}
+                    className={`w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 rounded-md transition ${
+                      isRebasing
+                        ? "opacity-50 cursor-not-allowed"
+                        : "cursor-pointer"
                     }`}
                   >
-                    {isLoading ? "Rebasing..." : "Rebase PR"}
+                    {isRebasing ? "Rebasing..." : "Rebase PR"}
                   </button>
-                  {prInfo.hasConflictsOnRebase && (
-                    <p className="text-red-400 text-sm">
-                      ⚠️ Cannot rebase automatically. Please resolve conflicts
-                      manually.
+                  <div className="min-h-[2.5rem] text-sm">
+                    {prInfo.hasConflictsOnRebase && (
+                      <p className="text-red-400">
+                        ⚠️ Cannot rebase automatically. Please resolve conflicts
+                        manually.
+                      </p>
+                    )}
+                  </div>
+
+                  {prInfo.rebaseSuccess && (
+                    <p className="text-green-400 text-sm">
+                      ✅ Rebase successful!
                     </p>
                   )}
                 </div>
