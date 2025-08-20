@@ -2,15 +2,16 @@
 body {
   margin: 0;
   padding: 0;
-  overflow: hidden;
   background: hsl(222.2 84% 4.9%); /* Dark background */
   color: hsl(210 40% 98%); /* Light text */
+  min-height: 200px;
+  max-height: 600px;
 }
 
 #root {
   width: 384px;
-  height: 600px;
-  overflow: hidden;
+  min-height: 200px;
+  max-height: 600px;
   background: hsl(222.2 84% 4.9%);
   color: hsl(210 40% 98%);
 }

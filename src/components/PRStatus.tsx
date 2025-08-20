@@ -6,15 +6,18 @@ import { Spinner } from '@/components/ui/spinner';
 import { GitBranch, GitCommit, FileText, CheckCircle } from 'lucide-react';
 
 export function PRStatus() {
-  const { prInfo, isLoading } = useAppStore();
+  const { prInfo, isLoading, isLoadingDetails } = useAppStore();
 
-  if (isLoading) {
+  // Show loading if either initial load or details are loading
+  if (isLoading || isLoadingDetails) {
     return (
       <Card>
         <CardContent className="flex items-center justify-center py-8">
           <div className="flex flex-col items-center space-y-3">
             <Spinner size="lg" className="text-blue-600" />
-            <p className="text-sm text-muted-foreground">Checking PR status...</p>
+            <p className="text-sm text-muted-foreground">
+              {isLoading ? 'Initializing...' : 'Checking PR status...'}
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -66,9 +69,9 @@ export function PRStatus() {
         <Separator />
 
         {/* Status Info */}
-        {prInfo.behindBy !== undefined && (
-          <div>
-            {prInfo.behindBy === 0 ? (
+        <div>
+          {prInfo.behindBy !== undefined ? (
+            prInfo.behindBy === 0 ? (
               <div className="flex items-center gap-2 rounded-lg bg-green-50 p-2 dark:bg-green-950">
                 <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
                 <span className="text-xs font-medium text-green-800 dark:text-green-200">
@@ -88,9 +91,17 @@ export function PRStatus() {
                   </Badge>
                 )}
               </div>
-            )}
-          </div>
-        )}
+            )
+          ) : (
+            // Show loading state for status when data is not yet available
+            <div className="flex items-center gap-2 rounded-lg bg-muted/50 p-2">
+              <Spinner size="sm" className="text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">
+                Checking commit status...
+              </span>
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

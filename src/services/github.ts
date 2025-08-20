@@ -22,10 +22,14 @@ export class GitHubService {
   constructor(private readonly token: string) {}
 
   /**
-   * Makes a GET request to the GitHub API
+   * Makes a GET request to the GitHub API with cache busting
    */
   private async get<T>(endpoint: string): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+    // Add timestamp to prevent 304 Not Modified responses
+    const separator = endpoint.includes('?') ? '&' : '?';
+    const cacheBustingUrl = `${this.baseUrl}${endpoint}${separator}_t=${Date.now()}`;
+    
+    const response = await fetch(cacheBustingUrl, {
       headers: createGitHubHeaders(this.token),
     });
 

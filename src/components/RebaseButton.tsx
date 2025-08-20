@@ -6,9 +6,15 @@ import { Spinner } from '@/components/ui/spinner';
 import { GitMerge, CheckCircle, AlertTriangle, X } from 'lucide-react';
 
 export function RebaseButton() {
-  const { prInfo, isRebasing, rebase, error } = useAppStore();
+  const { prInfo, isRebasing, isLoadingDetails, rebase, error } = useAppStore();
 
-  if (prInfo.behindBy === 0) {
+  // Don't show rebase button if still loading details or if up to date
+  if (isLoadingDetails || prInfo.behindBy === 0) {
+    return null;
+  }
+
+  // Don't show if we don't have behind count yet
+  if (prInfo.behindBy === undefined) {
     return null;
   }
 

@@ -3,53 +3,65 @@ import { createGitHubService } from '../services/github';
 import { getCurrentTab, getStoredToken, saveToken, isGitHubPRUrl, parsePRUrl } from '../utils';
 import type { PRInfo, ApiError } from '../types';
 
+// Constants
+const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes cache
+const INITIAL_PR_INFO: Partial<PRInfo> = {
+  owner: '',
+  repo: '',
+  prNumber: '',
+  base: '',
+  head: '',
+  behindBy: 0,
+  filesInBehindCommits: 0,
+  hasConflictsOnRebase: false,
+  rebaseSuccess: false,
+};
+
 interface AppState {
   // Core state
   token: string;
   isPRPage: boolean;
   prInfo: Partial<PRInfo>;
   isLoading: boolean;
+  isLoadingDetails: boolean;
   isRebasing: boolean;
   error: ApiError | null;
+  lastFetchTime: number;
+  cacheKey: string;
 
   // Actions
   initialize: () => Promise<void>;
   setToken: (token: string) => Promise<void>;
-  fetchPRData: () => Promise<void>;
+  fetchPRData: (forceRefresh?: boolean) => Promise<void>;
   rebase: () => Promise<void>;
   clearError: () => void;
   reset: () => void;
+  reload: () => Promise<void>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
   // Initial state
   token: '',
   isPRPage: false,
-  prInfo: {
-    owner: '',
-    repo: '',
-    prNumber: '',
-    base: '',
-    head: '',
-    behindBy: 0,
-    filesInBehindCommits: 0,
-    hasConflictsOnRebase: false,
-    rebaseSuccess: false,
-  },
+  prInfo: INITIAL_PR_INFO,
   isLoading: true,
+  isLoadingDetails: false,
   isRebasing: false,
   error: null,
+  lastFetchTime: 0,
+  cacheKey: '',
 
-  // Initialize app - check token and current tab
+  // Initialize app - check token and current tab with optimized loading
   initialize: async () => {
     try {
       set({ isLoading: true, error: null });
 
-      // Get stored token
-      const storedToken = await getStoredToken();
+      // Run Chrome API calls in parallel for faster initialization
+      const [storedToken, tab] = await Promise.all([
+        getStoredToken(),
+        getCurrentTab()
+      ]);
       
-      // Check current tab
-      const tab = await getCurrentTab();
       const url = tab?.url || '';
       const isPRPage = isGitHubPRUrl(url);
       
@@ -62,15 +74,19 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
 
+      // Update basic state immediately
       set({ 
         token: storedToken || '', 
         isPRPage, 
-        prInfo: { ...get().prInfo, ...prInfo },
-        isLoading: false 
+        prInfo: { ...get().prInfo, ...prInfo }
       });
 
+      // Show UI immediately, then load PR details in background
+      set({ isLoading: false });
 
+      // If we have everything needed, fetch PR data in background
       if (storedToken && isPRPage && parsedPR) {
+        // Fetch PR data without blocking UI
         get().fetchPRData();
       }
     } catch (error) {
@@ -103,20 +119,33 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Fetch PR data
-  fetchPRData: async () => {
-    const { token, prInfo } = get();
+  // Fetch PR data with optimized parallel calls and caching
+  fetchPRData: async (forceRefresh = false) => {
+    const { token, prInfo, lastFetchTime, cacheKey } = get();
     
     if (!token || !prInfo.owner || !prInfo.repo || !prInfo.prNumber) {
       return;
     }
 
+    // Create cache key for this PR
+    const currentCacheKey = `${prInfo.owner}/${prInfo.repo}/${prInfo.prNumber}`;
+    const now = Date.now();
+
+    // Check if we can use cached data (same PR, within cache duration, not forced refresh)
+    if (!forceRefresh && 
+        cacheKey === currentCacheKey && 
+        (now - lastFetchTime) < CACHE_DURATION &&
+        prInfo.base && prInfo.head) {
+      set({ isLoadingDetails: false });
+      return;
+    }
+
     try {
-      set({ isLoading: true, error: null });
+      set({ isLoadingDetails: true, error: null });
 
       const githubService = createGitHubService(token);
 
-      // Get PR details
+      // Get PR details first (required for base/head refs)
       const prDetails = await githubService.getPullRequest(
         prInfo.owner, 
         prInfo.repo, 
@@ -126,36 +155,30 @@ export const useAppStore = create<AppState>((set, get) => ({
       const base = prDetails.base?.ref || '';
       const head = prDetails.head?.ref || '';
 
+      // Update with base/head immediately
       set({ 
         prInfo: { ...get().prInfo, base, head }
       });
 
       if (base && head) {
-        // Compare branches to get behind count
-        const compareData = await githubService.compareBranches(
-          prInfo.owner, 
-          prInfo.repo, 
-          base, 
-          head
-        );
-        
-        const behindBy = compareData.behind_by || 0;
+        // Make both compare calls in parallel for faster loading
+        const [compareData, reverseCompareData] = await Promise.allSettled([
+          // Get behind count
+          githubService.compareBranches(prInfo.owner, prInfo.repo, base, head),
+          // Get files in behind commits (reverse comparison)
+          githubService.compareBranches(prInfo.owner, prInfo.repo, head, base)
+        ]);
+
+        let behindBy = 0;
         let filesInBehindCommits = 0;
 
-        // If behind, get files involved in the behind commits
-        if (behindBy > 0) {
-          try {
-            // Compare head...base to get files in commits we're behind
-            const reverseCompareData = await githubService.compareBranches(
-              prInfo.owner, 
-              prInfo.repo, 
-              head, // baseBranch parameter
-              base  // featureBranch parameter
-            );
-            filesInBehindCommits = reverseCompareData.files?.length || 0;
-          } catch (error) {
-            console.error('Error fetching reverse compare data:', error);
-          }
+        // Process compare results
+        if (compareData.status === 'fulfilled') {
+          behindBy = compareData.value.behind_by || 0;
+        }
+
+        if (reverseCompareData.status === 'fulfilled' && behindBy > 0) {
+          filesInBehindCommits = reverseCompareData.value.files?.length || 0;
         }
 
         set({ 
@@ -166,10 +189,12 @@ export const useAppStore = create<AppState>((set, get) => ({
             hasConflictsOnRebase: false,
             rebaseSuccess: false
           },
-          isLoading: false 
+          isLoadingDetails: false,
+          lastFetchTime: now,
+          cacheKey: currentCacheKey
         });
       } else {
-        set({ isLoading: false });
+        set({ isLoadingDetails: false });
       }
     } catch (error: any) {
       set({ 
@@ -178,7 +203,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           status: error.status,
           code: error.code
         }, 
-        isLoading: false 
+        isLoadingDetails: false 
       });
     }
   },
@@ -249,20 +274,32 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       token: '',
       isPRPage: false,
-      prInfo: {
-        owner: '',
-        repo: '',
-        prNumber: '',
-        base: '',
-        head: '',
-        behindBy: 0,
-        filesInBehindCommits: 0,
-        hasConflictsOnRebase: false,
-        rebaseSuccess: false,
-      },
+      prInfo: INITIAL_PR_INFO,
       isLoading: true,
+      isLoadingDetails: false,
       isRebasing: false,
       error: null,
+      lastFetchTime: 0,
+      cacheKey: '',
     });
+  },
+
+  // Complete reload - reset and reinitialize with cache clearing
+  reload: async () => {
+    // Clear all cached data
+    set({
+      token: '',
+      isPRPage: false,
+      prInfo: INITIAL_PR_INFO,
+      isLoading: true,
+      isLoadingDetails: false,
+      isRebasing: false,
+      error: null,
+      lastFetchTime: 0,
+      cacheKey: '', // Clear cache key to force fresh data
+    });
+    
+    // Force fresh initialization
+    await get().initialize();
   }
 }));

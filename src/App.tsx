@@ -12,45 +12,17 @@ import { GitBranch, X, RotateCcw } from 'lucide-react';
 import './App.css';
 
 function App() {
-  const { initialize, token, isPRPage, isLoading, error, clearError, reset } = useAppStore();
+  const { token, isPRPage, isLoading, isLoadingDetails, error, clearError, reload, fetchPRData } = useAppStore();
 
   useEffect(() => {
-    // Force complete reload when extension opens
-    const handleExtensionOpen = () => {
-      reset(); // Clear all state
-      initialize(); // Reinitialize
-    };
-
-    // Listen for visibility change to detect extension reopening
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        handleExtensionOpen();
-      }
-    };
-
-    // Listen for focus events to detect extension reopening
-    const handleFocus = () => {
-      handleExtensionOpen();
-    };
-
-    // Initial load
-    handleExtensionOpen();
-
-    // Add event listeners
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleFocus);
-
-    // Cleanup
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleFocus);
-    };
-  }, [initialize, reset]);
+    // Initialize extension when component mounts
+    reload();
+  }, [reload]);
 
   if (isLoading) {
     return (
-      <div className="w-96 h-[600px] bg-background text-foreground flex items-center justify-center dark">
-        <div className="flex flex-col items-center space-y-3">
+      <div className="w-96 min-h-[200px] max-h-[600px] bg-background text-foreground flex items-center justify-center dark">
+        <div className="flex flex-col items-center space-y-3 p-8">
           <Spinner size="lg" className="text-primary" />
           <p className="text-sm text-muted-foreground">Loading...</p>
         </div>
@@ -59,35 +31,43 @@ function App() {
   }
 
   return (
-    <div className="w-96 h-[600px] bg-background text-foreground overflow-hidden dark">
-      <div className="h-full flex flex-col p-4 space-y-4">
+    <div className="w-96 min-h-[200px] max-h-[600px] bg-background text-foreground overflow-y-auto dark">
+      <div className="flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-2">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-              <GitBranch className="h-5 w-5 text-primary" />
+        <div className="flex-shrink-0 flex items-center justify-between p-4 pb-2">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+              <GitBranch className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold">PR Rebase Assistant</h1>
-              <p className="text-xs text-muted-foreground">Automate rebasing in one click</p>
+              <h1 className="text-base font-semibold leading-tight">PR Rebase Assistant</h1>
+              <p className="text-xs text-muted-foreground leading-tight">Automate rebasing in one click</p>
             </div>
           </div>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => {
-              reset();
-              initialize();
+              if (isPRPage && token) {
+                fetchPRData(true); // Force refresh with cache bypass
+              } else {
+                reload(); // Complete reload
+              }
             }}
-            className="h-8 w-8 p-0"
+            disabled={isLoading || isLoadingDetails}
+            className="h-7 w-7 p-0 flex-shrink-0 cursor-pointer hover:cursor-pointer disabled:cursor-not-allowed"
             title="Refresh Extension"
           >
-            <RotateCcw className="h-4 w-4" />
+            {isLoading || isLoadingDetails ? (
+              <Spinner size="sm" className="h-3.5 w-3.5" />
+            ) : (
+              <RotateCcw className="h-3.5 w-3.5" />
+            )}
           </Button>
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="px-4 pb-4">
           {(() => {
             if (!isPRPage) {
               return <NotPRPage />;
@@ -98,7 +78,7 @@ function App() {
             }
             
             return (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <PRStatus />
                 
                 {/* Global Error Display */}

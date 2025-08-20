@@ -22,6 +22,7 @@ export function createGitHubHeaders(token: string): HeadersInit {
     'Accept': 'application/vnd.github+json',
     'Authorization': `Bearer ${token}`,
     'X-GitHub-Api-Version': '2022-11-28',
+    'Cache-Control': 'no-cache',
   };
 }
 
@@ -43,22 +44,20 @@ export async function getCurrentTab(): Promise<ChromeTab | null> {
   }
 }
 
-export function getStoredToken(): Promise<string | null> {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(CHROME_STORAGE_KEYS.GITHUB_TOKEN, (result: ChromeStorageResult) => {
-      resolve(result.githubToken || null);
-    });
-  });
+export async function getStoredToken(): Promise<string | null> {
+  try {
+    const result = await chrome.storage.local.get(CHROME_STORAGE_KEYS.GITHUB_TOKEN) as ChromeStorageResult;
+    return result.githubToken || null;
+  } catch (error) {
+    console.error('Error getting stored token:', error);
+    return null;
+  }
 }
 
-export function saveToken(token: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    chrome.storage.local.set({ [CHROME_STORAGE_KEYS.GITHUB_TOKEN]: token }, () => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-      } else {
-        resolve();
-      }
-    });
-  });
+export async function saveToken(token: string): Promise<void> {
+  try {
+    await chrome.storage.local.set({ [CHROME_STORAGE_KEYS.GITHUB_TOKEN]: token });
+  } catch (error) {
+    throw new Error(`Failed to save token: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
