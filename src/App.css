@@ -1,0 +1,34 @@
+/* Chrome Extension Popup Styles */
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: hsl(222.2 84% 4.9%); /* Dark background */
+  color: hsl(210 40% 98%); /* Light text */
+}
+
+#root {
+  width: 384px;
+  height: 600px;
+  overflow: hidden;
+  background: hsl(222.2 84% 4.9%);
+  color: hsl(210 40% 98%);
+}
+
+/* Custom scrollbar for the main content area */
+.overflow-y-auto::-webkit-scrollbar {
+  width: 4px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: hsl(217.2 32.6% 17.5%); /* Dark mode border color */
+  border-radius: 2px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: hsl(215 20.2% 65.1%); /* Dark mode muted foreground */
+}

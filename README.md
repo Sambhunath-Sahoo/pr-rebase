@@ -1,54 +1,163 @@
-# React + TypeScript + Vite
+# PR Rebase Assistant
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A Chrome extension that helps you rebase GitHub Pull Requests with one click, showing detailed status information about commits behind and files affected.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- 🔍 **Auto-detect GitHub PR pages** - Works automatically when you visit a GitHub Pull Request
+- 📊 **Detailed Status** - Shows commits behind and files affected by the rebase
+- 🔄 **One-click Rebase** - Automatically rebase your PR branch with the base branch
+- ⚠️ **Conflict Detection** - Alerts you when manual conflict resolution is needed
+- 🔐 **Secure Token Storage** - Safely stores your GitHub token in Chrome's local storage
+- 🎨 **Modern UI** - Clean, GitHub-inspired dark theme interface
 
-## Expanding the ESLint configuration
+## Installation
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Development Setup
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd pr-rebase
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   # or
+   yarn install
+   ```
+
+3. **Build the extension**
+   ```bash
+   npm run build
+   # or
+   yarn build
+   ```
+
+4. **Load in Chrome**
+   - Open Chrome and go to `chrome://extensions/`
+   - Enable "Developer mode"
+   - Click "Load unpacked" and select the `dist` folder
+
+### Production Build
+
+```bash
+npm run build
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+The built extension will be in the `dist` folder.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Usage
 
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
+1. **Setup GitHub Token**
+   - Visit [GitHub Settings > Personal Access Tokens](https://github.com/settings/tokens)
+   - Create a new token with `repo` permissions
+   - Copy the token
+
+2. **Use the Extension**
+   - Navigate to any GitHub Pull Request page
+   - Click the extension icon in your Chrome toolbar
+   - Enter your GitHub token when prompted
+   - View PR status and rebase if needed
+
+## Project Structure
+
 ```
+src/
+├── components/          # Reusable UI components
+│   ├── TokenInput.tsx   # GitHub token input form
+│   ├── PRStatus.tsx     # PR status display
+│   ├── RebaseButton.tsx # Rebase action button
+│   ├── LoadingSpinner.tsx
+│   ├── ErrorMessage.tsx
+│   ├── NotPRPage.tsx
+│   └── index.ts         # Barrel exports
+├── hooks/               # Custom React hooks
+│   ├── useGitHubToken.ts # Token management
+│   ├── useCurrentTab.ts  # Tab detection
+│   ├── usePRData.ts     # PR data fetching
+│   ├── useRebase.ts     # Rebase operations
+│   └── index.ts
+├── services/            # API services
+│   └── github.ts        # GitHub API client
+├── types/               # TypeScript type definitions
+│   ├── github.ts        # GitHub API types
+│   └── app.ts           # Application types
+├── utils/               # Utility functions
+│   ├── github.ts        # GitHub-related utilities
+│   └── chrome.ts        # Chrome extension utilities
+├── constants/           # Application constants
+│   └── github.ts        # GitHub API constants
+├── App.tsx              # Main application component
+├── main.tsx             # Application entry point
+├── index.css            # Global styles
+└── vite-env.d.ts        # Vite type definitions
+```
+
+## Technology Stack
+
+- **React 19** - UI framework
+- **TypeScript** - Type safety
+- **Vite** - Build tool and dev server
+- **Tailwind CSS** - Styling
+- **Chrome Extensions API** - Browser integration
+- **GitHub REST API** - GitHub integration
+
+## API Endpoints Used
+
+- `GET /repos/{owner}/{repo}/pulls/{number}` - Get PR details
+- `GET /repos/{owner}/{repo}/compare/{base}...{head}` - Compare branches
+- `POST /repos/{owner}/{repo}/merges` - Merge branches (for rebasing)
+
+## Development
+
+### Available Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run lint` - Run ESLint
+- `npm run preview` - Preview production build
+
+### Development Workflow
+
+1. Run `npm run dev` for hot reloading during development
+2. Test changes by reloading the extension in Chrome
+3. Build with `npm run build` before publishing
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## Security
+
+- GitHub tokens are stored locally in Chrome's secure storage
+- No tokens are transmitted to external servers
+- All API calls go directly to GitHub's official API
+
+## License
+
+MIT License - see LICENSE file for details
+
+## Troubleshooting
+
+### Common Issues
+
+1. **"Not a Pull Request page"**
+   - Make sure you're on a GitHub PR page with URL format: `https://github.com/owner/repo/pull/123`
+
+2. **"API rate limit exceeded"**
+   - GitHub API has rate limits. Wait a few minutes and try again
+
+3. **"Cannot rebase automatically"**
+   - There are merge conflicts that need manual resolution
+   - Resolve conflicts in your local repository and push
+
+4. **Extension not loading**
+   - Make sure you've built the project (`npm run build`)
+   - Load the `dist` folder, not the source folder
+   - Check Chrome's extension error console for details
